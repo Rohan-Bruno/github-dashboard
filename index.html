@@ -1,0 +1,845 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bruno GitHub Issues Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:#f7f8fa; --panel:#fff; --panel-2:#fbfcfd;
+    --ink:#11161d; --ink-2:#5a6473; --ink-3:#8b95a3;
+    --line:#e4e8ee; --line-2:#eef1f5;
+    --brand:#4f46e5; --brand-ink:#fff; --brand-soft:#eef0ff;
+    --open:#2563eb; --closed:#7c8598; --warn:#d97706; --bad:#dc2626; --good:#059669;
+    --shadow:0 1px 2px rgba(16,24,40,.04), 0 4px 16px rgba(16,24,40,.06);
+    --r:12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme=light]) {
+      --bg:#0d1117; --panel:#151b23; --panel-2:#1b222c;
+      --ink:#e8edf4; --ink-2:#9aa6b6; --ink-3:#6e7a8a;
+      --line:#242c38; --line-2:#1f2732;
+      --brand:#7c7cf8; --brand-ink:#0d1117; --brand-soft:#1e2140;
+      --open:#5b9bff; --closed:#6b7688; --warn:#f0a63c; --bad:#f2675f; --good:#35c48a;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.28);
+    }
+  }
+  [data-theme=dark] {
+    --bg:#0d1117; --panel:#151b23; --panel-2:#1b222c;
+    --ink:#e8edf4; --ink-2:#9aa6b6; --ink-3:#6e7a8a;
+    --line:#242c38; --line-2:#1f2732;
+    --brand:#7c7cf8; --brand-ink:#0d1117; --brand-soft:#1e2140;
+    --open:#5b9bff; --closed:#6b7688; --warn:#f0a63c; --bad:#f2675f; --good:#35c48a;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.28);
+  }
+  * { box-sizing:border-box }
+  html { -webkit-text-size-adjust:100% }
+  body {
+    margin:0; background:var(--bg); color:var(--ink);
+    font:400 14px/1.55 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-feature-settings:'cv02','cv03','cv04','ss01';
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3 { margin:0; letter-spacing:-.018em; font-weight:600 }
+  .num { font-family:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric:tabular-nums }
+
+  /* ---------- header ---------- */
+  header {
+    position:sticky; top:0; z-index:20; background:color-mix(in srgb, var(--panel) 88%, transparent);
+    backdrop-filter:saturate(180%) blur(12px); border-bottom:1px solid var(--line);
+  }
+  .bar { max-width:1280px; margin:0 auto; padding:14px 24px; display:flex; align-items:center; gap:16px }
+  .bar > div:nth-child(2) { min-width:0 }          /* title block may shrink, actions may not */
+  .bar-actions { margin-left:auto; display:flex; align-items:center; gap:10px; flex:none }
+  .mark { width:32px; height:32px; border-radius:9px; background:linear-gradient(140deg,var(--brand),#a78bfa);
+          display:grid; place-items:center; color:#fff; font-weight:700; font-size:15px; flex:none }
+  .repo { font-size:19px; font-weight:650; letter-spacing:-.02em; line-height:1.25 }
+  .meta { font-size:12px; color:var(--ink-2); margin-top:2px;
+          white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100% }
+  .meta > span { vertical-align:middle }
+  .dot { display:inline-block; width:4px; height:4px; border-radius:50%; background:var(--ink-3); margin:0 7px }
+  .badge { display:inline-block; font-size:11px; font-weight:600; padding:1px 8px; border-radius:999px;
+           border:1px solid var(--line); background:var(--panel-2); color:var(--ink-2); letter-spacing:.02em }
+  .badge.live { color:var(--good); border-color:color-mix(in srgb, var(--good) 35%, var(--line)); background:color-mix(in srgb, var(--good) 10%, transparent) }
+  .badge.sample { color:var(--warn); border-color:color-mix(in srgb, var(--warn) 35%, var(--line)); background:color-mix(in srgb, var(--warn) 10%, transparent) }
+  .spacer { margin-left:auto }
+  .icon-btn { width:34px; height:34px; border-radius:9px; border:1px solid var(--line); background:var(--panel);
+              color:var(--ink-2); cursor:pointer; display:grid; place-items:center; font-size:15px }
+  .icon-btn:hover { background:var(--panel-2); color:var(--ink) }
+
+  /* ---------- tabs ---------- */
+  nav { max-width:1280px; margin:0 auto; padding:0 24px 12px; display:flex; gap:4px }
+  nav button { border:0; background:transparent; color:var(--ink-2); font:inherit; font-weight:500;
+               padding:8px 14px; border-radius:9px; cursor:pointer }
+  nav button:hover { background:var(--panel-2); color:var(--ink) }
+  nav button[aria-selected=true] { background:var(--brand); color:var(--brand-ink); font-weight:600 }
+
+  /* ---------- layout ---------- */
+  main { max-width:1280px; margin:0 auto; padding:24px }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--shadow); padding:20px; margin-bottom:20px }
+  .card > header { position:static; background:none; backdrop-filter:none; border:0; padding:0; margin-bottom:16px;
+                   display:flex; align-items:baseline; gap:10px; flex-wrap:wrap }
+  .card h2 { font-size:14px }
+  .hint { font-size:12px; color:var(--ink-3); font-weight:400 }
+  .grid { display:grid; gap:20px; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)) }
+
+  /* ---------- kpis ---------- */
+  .kpis { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(158px,1fr)); margin-bottom:20px }
+  .kpi { background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:16px 18px;
+         box-shadow:var(--shadow); position:relative; overflow:hidden }
+  .kpi::before { content:''; position:absolute; inset:0 auto 0 0; width:3px; background:var(--accent,var(--brand)) }
+  .kpi b { display:block; font-size:30px; font-weight:600; letter-spacing:-.03em; line-height:1.15 }
+  .kpi span { display:block; font-size:11.5px; color:var(--ink-2); margin-top:3px; font-weight:500 }
+
+  /* ---------- controls ---------- */
+  .filters { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start }
+  .field { display:flex; flex-direction:column; gap:6px }
+  .field > label:not(.check) { font-size:11px; font-weight:600; color:var(--ink-3); text-transform:uppercase; letter-spacing:.05em }
+  select, input, button.ghost {
+    font:inherit; font-size:13px; color:var(--ink); background:var(--panel);
+    border:1px solid var(--line); border-radius:9px; padding:7px 10px;
+  }
+  select:focus-visible, button:focus-visible { outline:2px solid var(--brand); outline-offset:1px }
+  select[multiple] { min-width:190px; min-height:104px; padding:4px }
+  select[multiple] option { padding:3px 6px; border-radius:5px }
+  button.ghost { cursor:pointer; font-weight:500; color:var(--ink-2) }
+  button.ghost:hover { background:var(--panel-2); color:var(--ink) }
+  .check { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500;
+           border:1px solid var(--line); border-radius:9px; padding:7px 12px; cursor:pointer; background:var(--panel) }
+  .check:hover { background:var(--panel-2) }
+  .check input { accent-color:var(--brand); margin:0 }
+
+  /* ---------- charts ---------- */
+  .chart { position:relative; height:300px }
+
+  /* ---------- notes ---------- */
+  .note { border-radius:10px; padding:12px 14px; font-size:12.5px; line-height:1.6;
+          background:color-mix(in srgb, var(--warn) 9%, transparent);
+          border:1px solid color-mix(in srgb, var(--warn) 28%, transparent); color:var(--ink) }
+  .note b { font-weight:600 }
+  .defs { font-size:12px; color:var(--ink-2); line-height:1.7 }
+  .defs b { color:var(--ink); font-weight:600 }
+
+  /* ---------- table ---------- */
+  .scroll { overflow-x:auto; margin:0 -4px }
+  table { width:100%; border-collapse:separate; border-spacing:0; font-size:13px }
+  th { text-align:left; font-size:11px; font-weight:600; color:var(--ink-3); text-transform:uppercase; letter-spacing:.05em;
+       padding:8px 10px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--panel) }
+  td { padding:9px 10px; border-bottom:1px solid var(--line-2); vertical-align:top }
+  tbody tr:hover { background:var(--panel-2) }
+  td a { color:var(--brand); text-decoration:none; font-weight:500 }
+  td a:hover { text-decoration:underline }
+  .pill { display:inline-block; min-width:62px; text-align:center; font-size:11px; font-weight:600;
+          padding:2px 8px; border-radius:999px; border:1px solid var(--line); color:var(--ink-2);
+          background:var(--panel-2); letter-spacing:.01em }
+  .pill.open { color:var(--open); border-color:color-mix(in srgb, var(--open) 35%, var(--line)); background:color-mix(in srgb, var(--open) 9%, transparent) }
+  .pill.closed { color:var(--closed); border-color:var(--line) }
+  .lbl { display:inline-block; font-size:10.5px; padding:1px 7px; border-radius:6px; margin:1px 3px 1px 0;
+         background:var(--brand-soft); color:var(--brand); border:1px solid color-mix(in srgb, var(--brand) 20%, transparent) }
+
+  /* ---------- duplicates ---------- */
+  .clu { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-bottom:10px; background:var(--panel-2) }
+  .clu .tag { font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-3) }
+  .clu ul { margin:8px 0 0; padding-left:18px } .clu li { margin:3px 0; line-height:1.5 }
+  .clu a { color:var(--brand); text-decoration:none; font-weight:600 } .clu a:hover { text-decoration:underline }
+
+  .hide { display:none !important }   /* utility class: must win over any later display: rule */
+  .subbar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:0 0 14px }
+  .subbar .hint { flex-basis:100%; margin-top:-2px }
+
+  /* "How these are measured" info popover */
+  .info { position:relative; display:inline-flex; align-items:center; gap:7px; cursor:help;
+          font-size:12.5px; font-weight:500; color:var(--ink-2); padding:7px 11px; border-radius:9px;
+          border:1px solid var(--line); background:var(--panel); white-space:nowrap }
+  .info:hover, .info:focus-visible { color:var(--ink); border-color:color-mix(in srgb, var(--brand) 40%, var(--line)); outline:none }
+  .info .i { display:grid; place-items:center; width:16px; height:16px; border-radius:50%;
+             background:var(--brand); color:#fff; font-size:10.5px; font-weight:700; font-style:italic }
+  .pop { position:absolute; top:calc(100% + 10px); right:0; z-index:60; width:min(560px,88vw);
+         background:var(--panel); border:1px solid var(--line); border-radius:14px;
+         box-shadow:0 8px 40px rgba(16,24,40,.16), var(--shadow);
+         padding:0; overflow:hidden; text-align:left; cursor:default; white-space:normal;
+         opacity:0; visibility:hidden; transform:translateY(-4px); transition:opacity .13s, transform .13s, visibility .13s }
+  .info:hover .pop, .info:focus-within .pop, .info.open .pop { opacity:1; visibility:visible; transform:translateY(0) }
+  .chart-hint { font-size:11px; color:var(--ink-3); margin-top:8px }
+
+  /* popover contents */
+  .pop-head { display:flex; align-items:center; gap:8px; padding:12px 16px; font-size:12.5px; font-weight:600;
+              color:var(--ink); background:var(--panel-2); border-bottom:1px solid var(--line) }
+  .pop-head .k { font-size:10.5px; font-weight:600; color:var(--ink-3); margin-left:auto; letter-spacing:.04em;
+                 text-transform:uppercase }
+  .deflist { margin:0; padding:6px 0 }
+  .deflist .row { display:grid; grid-template-columns:132px 1fr; gap:14px; padding:9px 16px; align-items:start }
+  .deflist .row + .row { border-top:1px solid var(--line-2) }
+  .deflist dt { font-size:11.5px; font-weight:600; color:var(--ink); letter-spacing:.01em }
+  .deflist dt small { display:block; font-weight:500; color:var(--ink-3); font-size:10.5px; margin-top:2px }
+  .deflist dd { margin:0; font-size:12px; line-height:1.55; color:var(--ink-2) }
+  .pop-foot { display:flex; gap:9px; padding:11px 16px; font-size:11.5px; line-height:1.5; color:var(--ink-2);
+              background:color-mix(in srgb, var(--warn) 9%, transparent); border-top:1px solid var(--line) }
+  .pop-foot b { color:var(--ink); font-weight:600 }
+  .pop-foot .warn { color:var(--warn); font-size:13px; line-height:1 }
+
+  /* segmented state control */
+  .seg { display:inline-flex; background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:3px; gap:2px }
+  .seg button { border:0; background:transparent; color:var(--ink-2); font:inherit; font-size:13px; font-weight:500;
+                padding:6px 14px; border-radius:7px; cursor:pointer }
+  .seg button:hover { color:var(--ink) }
+  .seg button[aria-pressed=true] { background:var(--panel); color:var(--ink); font-weight:600; box-shadow:var(--shadow) }
+  .field.grow { flex:1 1 280px; max-width:420px }
+  .field.grow select[multiple] { width:100%; min-width:0 }
+  input[type=search] { width:100%; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px }
+  .chip { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500; padding:4px 6px 4px 11px;
+          border-radius:999px; background:var(--brand-soft); color:var(--brand);
+          border:1px solid color-mix(in srgb, var(--brand) 25%, transparent) }
+  .chip button { border:0; background:transparent; color:inherit; cursor:pointer; font-size:14px; line-height:1; padding:0 4px; border-radius:50% }
+  .chip button:hover { background:color-mix(in srgb, var(--brand) 18%, transparent) }
+
+  /* clickable KPIs */
+  .kpi.click { cursor:pointer; transition:transform .12s ease, border-color .12s ease }
+  .kpi.click:hover { transform:translateY(-2px); border-color:color-mix(in srgb, var(--accent) 45%, var(--line)) }
+  .kpi.on { border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent), var(--shadow) }
+  .kpi small { display:block; font-size:10.5px; color:var(--ink-3); margin-top:6px; font-weight:500 }
+
+  /* scrollable issue table: the header is its own table above the scroll box, so the
+     scrollbar track starts below the column headings instead of running behind them */
+  .tablewrap { border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--panel) }
+  .tablewrap table { table-layout:fixed; width:100%; border-spacing:0 }
+  .thead-only { border-bottom:1px solid var(--line); background:var(--panel-2); padding-right:10px }
+  .thead-only th { position:static; background:transparent; border-bottom:0 }
+  .tablebox { max-height:520px; overflow-y:auto; overflow-x:hidden; scrollbar-gutter:stable }
+  .tablebox td:nth-child(3) { overflow-wrap:anywhere }
+  .tablebox::-webkit-scrollbar { width:10px }
+  .tablebox::-webkit-scrollbar-track { background:transparent }
+  .tablebox::-webkit-scrollbar-thumb { background:var(--line); border-radius:99px; border:3px solid var(--panel) }
+  .tablebox::-webkit-scrollbar-thumb:hover { background:var(--ink-3) }
+  .tablebox { scrollbar-width:thin; scrollbar-color:var(--line) transparent }
+  td.rownum, th.rownum { color:var(--ink-3); text-align:right; padding-right:14px }
+  .thead-only th { padding-right:14px }
+
+  /* person detail */
+  .person { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); margin-top:14px }
+  .person div { background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:12px 14px }
+  .person .stat { cursor:pointer; transition:transform .12s ease, border-color .12s ease, background .12s }
+  .person .stat:hover { transform:translateY(-2px); border-color:color-mix(in srgb, var(--brand) 45%, var(--line));
+                        background:var(--panel) }
+  .person .stat:focus-visible { outline:2px solid var(--brand); outline-offset:1px }
+  .person b { display:block; font-size:21px; font-weight:600; letter-spacing:-.02em }
+  .person span { font-size:11px; color:var(--ink-2) }
+  @media (max-width:820px) { .info-text { display:none } .info { padding:7px 9px } }
+  @media (max-width:700px) { .bar, nav, main { padding-left:16px; padding-right:16px } .kpi b { font-size:25px } }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="mark">◆</div>
+    <div>
+      <div class="repo">Bruno GitHub Issues Dashboard</div>
+      <div class="meta" id="stamp">loading…</div>
+    </div>
+    <div class="bar-actions">
+      <span class="info" id="howInfo" tabindex="0" role="button" aria-describedby="peopleDefs">
+        <span class="info-text">How these are measured</span> <span class="i">i</span>
+        <span class="pop defs" id="peopleDefs"></span>
+      </span>
+      <button class="icon-btn" id="theme" title="Toggle theme" aria-label="Toggle theme">◐</button>
+    </div>
+  </div>
+  <nav id="tabs">
+    <button data-tab="overview" aria-selected="true">Overview</button>
+    <button data-tab="people" aria-selected="false">People</button>
+    <button data-tab="dupes" aria-selected="false">Duplicates</button>
+  </nav>
+</header>
+
+<main>
+  <div class="card filters-card">
+    <header><h2>Filters</h2><span class="hint" id="fCount"></span>
+      <span class="spacer"></span><button class="ghost" id="fReset">Reset all</button></header>
+    <div class="filters">
+      <div class="field">
+        <label for="fState">State</label>
+        <div class="seg" id="fStateSeg">
+          <button data-v="all" aria-pressed="true">All</button>
+          <button data-v="open" aria-pressed="false">Open</button>
+          <button data-v="closed" aria-pressed="false">Closed</button>
+        </div>
+        <select id="fState" class="hide"><option value="all"></option><option value="open"></option><option value="closed"></option></select>
+      </div>
+      <div class="field grow hide" id="asgField">
+        <label for="fAssignees">Assignee <span class="hint" id="asgCount"></span></label>
+        <input id="asgSearch" type="search" placeholder="Filter names…" autocomplete="off">
+        <select id="fAssignees" multiple size="6"></select>
+      </div>
+    </div>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <section id="tab-overview">
+    <div class="kpis" id="kpis"></div>
+    <div class="card">
+      <header><h2>Total Issues</h2><span class="hint" id="unansDef"></span>
+        <span class="spacer"></span>
+        <select id="totalsType"><option value="bar">Bar</option><option value="doughnut">Donut</option></select>
+      </header>
+      <div class="chart"><canvas id="cTotals"></canvas></div>
+    </div>
+    <div class="card">
+      <header><h2 id="tblTitle">Issues</h2><span class="hint" id="tableNote"></span>
+        <span class="spacer"></span><button class="ghost hide" id="clearFocus">Clear Selection</button></header>
+      <div class="subbar hide" id="unansBar">
+        <div class="seg" id="unansSeg">
+          <button data-v="all" aria-pressed="true">All</button>
+          <button data-v="silent" aria-pressed="false">No replies</button>
+          <button data-v="community" aria-pressed="false">Community only</button>
+        </div>
+        <label class="check"><input type="checkbox" id="hideTeamOpened"> Hide issues the team opened</label>
+        <span class="hint" id="unansExplain"></span>
+      </div>
+      <div class="tablewrap">
+        <table class="thead-only"><colgroup><col style="width:56px"><col style="width:82px"><col><col style="width:88px">
+          <col style="width:150px"><col style="width:160px"><col style="width:92px"><col style="width:104px"></colgroup><thead><tr>
+          <th class="rownum">No.</th><th>Issue</th><th>Title</th><th>State</th><th>Author</th><th>Assignees</th><th>Comments</th><th>Updated</th>
+        </tr></thead></table>
+        <div class="tablebox"><table id="tbl"><colgroup><col style="width:56px"><col style="width:82px"><col><col style="width:88px">
+          <col style="width:150px"><col style="width:160px"><col style="width:92px"><col style="width:104px"></colgroup><tbody></tbody></table></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-people" class="hide">
+    <div id="personCard"></div>
+    <div class="grid">
+      <div class="card">
+        <header><h2>Assigned Issues</h2><span class="hint">Open vs Closed, once per assignee</span></header>
+        <div class="chart"><canvas id="cAssigned"></canvas></div>
+        <div class="hint" id="asgNote" style="margin-top:10px"></div>
+        <div class="chart-hint">Click a bar to list those issues.</div>
+      </div>
+      <div class="card">
+        <header><h2>Comments Per Person</h2><span class="hint" id="comHint">Whole history</span></header>
+        <div class="chart"><canvas id="cComments"></canvas></div>
+        <div class="hint" style="margin-top:10px">Whole-history totals · narrows to the assignees you select.</div>
+        <div class="chart-hint">Click a bar to list the issues that person commented on.</div>
+      </div>
+      <div class="card">
+        <header><h2>Tickets Closed</h2>
+          <span class="spacer"></span>
+          <select id="closedMetric">
+            <option value="self_closed">Self-closed — author closed their own</option>
+            <option value="authored_closed">Closed by author — their issues, any closer</option>
+            <option value="closed_by_others">Closed by someone else — their issues</option>
+            <option value="closed_by_them">Closed by this person — any author</option>
+          </select>
+        </header>
+        <div class="chart"><canvas id="cClosed"></canvas></div>
+        <div class="hint" id="closedNote" style="margin-top:10px"></div>
+        <div class="chart-hint">Click a bar to list those issues.</div>
+      </div>
+    </div>
+    <div id="peopleIssues"></div>
+  </section>
+
+  <section id="tab-dupes" class="hide">
+    <div class="note">Heuristic — title-similarity clusters <b>over-match</b>. Issues that merely share vocabulary
+      ("crash on save" / "crash on export") can land together. Treat each cluster as a lead, not a verdict.</div>
+    <div class="card" style="margin-top:20px">
+      <header><h2>Duplicate findings</h2><span class="hint" id="dupeNote"></span>
+        <span class="spacer"></span>
+        <select id="dupeFilter"><option value="all">All reasons</option><option value="title-similarity">Title similarity</option><option value="label">Label</option><option value="state_reason">State reason</option></select>
+      </header>
+      <div id="dupes"></div>
+    </div>
+  </section>
+</main>
+<script>
+// tiny fallback so the page renders from file:// before data.json exists
+const FALLBACK = { meta:{repo:'sample/sample',generated_at:'',source:'fallback',internal:[],definitions:{}},
+  summary:{open:2,closed:1,unanswered:1,open_bugs:1,stale:0},
+  issues:[{number:1,title:'sample open issue',state:'open',labels:['bug'],author:'octocat',assignees:['octocat'],comments:0,internal_comments:0,created_at:'',updated_at:'',url:'#'},
+          {number:2,title:'sample open issue two',state:'open',labels:[],author:'devx',assignees:[],comments:3,internal_comments:1,created_at:'',updated_at:'',url:'#'},
+          {number:3,title:'sample closed issue',state:'closed',labels:[],author:'devx',assignees:['octocat'],comments:1,internal_comments:1,created_at:'',updated_at:'',url:'#'}],
+  people:[{login:'octocat',internal:true,assigned_total:2,assigned_open:1,comments:4,closed_by_them:1,self_closed:0,authored:1,authored_closed:0},
+          {login:'devx',internal:false,assigned_total:0,assigned_open:0,comments:2,closed_by_them:0,self_closed:1,authored:2,authored_closed:1}],
+  duplicates:[] };
+
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+
+// bot / automation accounts that should never appear as people
+const EXCLUDE_ASSIGNEES = ['copilot', 'maintainer-bruno'];
+const excluded = l => EXCLUDE_ASSIGNEES.includes(String(l).toLowerCase());
+
+// KPI drill-downs: each one is a predicate over the loaded issues
+const FOCUS = {
+  open:        { label:'Open issues',        test:i => i.state === 'open' },
+  closed:      { label:'Closed issues',      test:i => i.state === 'closed' },
+  unanswered:  { get label() { return UNANS_MODE[unansMode].label + (hideTeamOpened ? ', excluding team-opened' : ''); },
+                 test:i => isUnanswered(i) && UNANS_MODE[unansMode].test(i) && (!hideTeamOpened || !teamOpened(i)) },
+  bugs:        { label:'Open bugs',          test:i => i.state === 'open' && i.labels.some(l => /^bug$/i.test(l)) },
+  enhancements:{ label:'Open enhancements',  test:i => i.state === 'open' && i.labels.some(l => /^enhancement$/i.test(l)) },
+  stale:       { label:'Stale open issues',  test:i => i.state === 'open' && Date.now() - Date.parse(i.updated_at) > 60 * 864e5 },
+};
+let focus = null;
+let KPI_TOTAL = {};   // repo-wide figure behind each KPI card, for the cap explanation below
+// The unanswered set is two very different populations, so let them be picked apart:
+// nobody replied at all, versus the community replied but nobody from the team did.
+let unansMode = 'all';        // all | silent | community
+let hideTeamOpened = false;   // drop issues the team opened themselves
+const UNANS_MODE = {
+  all:       { label:'All unanswered',  test: () => true },
+  silent:    { label:'No replies at all', test: i => !i.comments },
+  community: { label:'Community replied, team did not', test: i => i.comments > 0 },
+};
+
+// "Tickets closed" metrics. closed_by_others is derived: an authored issue that was closed,
+// minus the ones the author closed themselves.
+const CLOSED_METRICS = {
+  self_closed: { get: p => p.self_closed,
+    note:'Self-closed: issues whose close-event actor equals the issue author, counted per author.' },
+  authored_closed: { get: p => p.authored_closed,
+    note:'Closed by author: closed issues grouped by the person who opened them, regardless of who closed them.' },
+  closed_by_others: { get: p => Math.max(0, p.authored_closed - p.self_closed),
+    note:'Closed by someone else: issues this person opened that were closed by a different account.' },
+  closed_by_them: { get: p => p.closed_by_them,
+    note:'Closed by this person: close actions credited to whoever closed the issue (deduped to the most recent closer).' },
+};
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const charts = {};
+let D = FALLBACK;
+
+// ---------------------------------------------------------------- theming
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  try { localStorage.setItem('theme', t); } catch {}
+  if (window.Chart) styleCharts();
+  if (D !== FALLBACK || charts.cTotals) renderAll();
+}
+function styleCharts() {
+  Chart.defaults.font.family = "'Inter', -apple-system, sans-serif";
+  Chart.defaults.font.size = 12;
+  Chart.defaults.color = css('--ink-2');
+  Chart.defaults.borderColor = css('--line');
+  Chart.defaults.plugins.tooltip.backgroundColor = css('--ink');
+  Chart.defaults.plugins.tooltip.titleColor = css('--panel');
+  Chart.defaults.plugins.tooltip.bodyColor = css('--panel');
+  Chart.defaults.plugins.tooltip.padding = 10;
+  Chart.defaults.plugins.tooltip.cornerRadius = 8;
+  Chart.defaults.plugins.tooltip.displayColors = false;
+}
+
+const palette = () => [css('--open'), css('--good'), css('--warn'), css('--bad'), css('--brand'), css('--closed')];
+
+// values printed inside doughnut slices — a 15-line plugin beats another CDN dependency
+const sliceValues = {
+  id:'sliceValues',
+  afterDatasetsDraw(chart) {
+    if (chart.config.type !== 'doughnut') return;
+    const { ctx } = chart;
+    chart.getDatasetMeta(0).data.forEach((arc, i) => {
+      const v = chart.data.datasets[0].data[i];
+      if (!v || arc.circumference < 0.25) return;      // skip slivers with no room for text
+      const { x, y } = arc.getCenterPoint();
+      const total = chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+      ctx.save();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
+      ctx.font = "600 13px 'Inter', sans-serif";
+      ctx.fillText(nf.format(v), x, y - 7);
+      ctx.font = "500 11px 'Inter', sans-serif";
+      ctx.globalAlpha = .85;
+      ctx.fillText(Math.round(v / total * 100) + '%', x, y + 8);
+      ctx.restore();
+    });
+  },
+};
+
+function draw(id, type, labels, datasets, opts = {}) {
+  const canvas = $('#' + id);
+  // past ~14 names vertical labels turn unreadable, so flip to horizontal bars
+  // and grow the box instead of cramming everything into a fixed 300px
+  const horiz = type === 'bar' && labels.length > 14;
+  canvas.parentElement.style.height = horiz ? Math.max(300, labels.length * 26 + 70) + 'px' : '300px';
+  const grid = { color: css('--line-2'), drawTicks: false };
+  const count = { beginAtZero:true, ticks:{ precision:0, padding:6 }, grid, border:{ display:false } };
+  const cat = { ticks:{ padding:6, autoSkip:false }, grid:{ display:false }, border:{ display:false } };
+  charts[id]?.destroy();
+  charts[id] = new Chart(canvas, {
+    type, plugins:[sliceValues],
+    data: { labels, datasets: datasets.map(d => ({ borderRadius:6, borderWidth:0, maxBarThickness:38, ...d })) },
+    options: {
+      responsive:true, maintainAspectRatio:false, indexAxis: horiz ? 'y' : 'x',
+      layout:{ padding:{ top:4 } },
+      plugins:{ legend:{ display: datasets.length > 1 || type === 'doughnut',
+                         position: type === 'doughnut' ? 'right' : 'top', align:'end',
+                         labels:{ boxWidth:10, boxHeight:10, usePointStyle:true, pointStyle:'circle', padding:14 } } },
+      scales: type === 'doughnut' ? {} : (horiz ? { x:count, y:cat } : { x:cat, y:count }),
+      ...opts },
+  });
+}
+
+const fill = (sel, values) => { sel.innerHTML = values.map(v => `<option value="${v}">${v}</option>`).join(''); };
+const picked = sel => [...sel.selectedOptions].map(o => o.value);
+const esc = s => String(s).replace(/[<>&]/g, c => ({ '<':'&lt;', '>':'&gt;', '&':'&amp;' }[c]));
+const nf = new Intl.NumberFormat();
+
+// logins are case-insensitive on GitHub, so membership is checked lowercased
+const internalSet = () => ({ s:new Set((D.meta.internal || []).map(l => l.toLowerCase())),
+                             has(l) { return this.s.has(String(l).toLowerCase()); } });
+const hasInternal = () => (D.meta.internal || []).length > 0;
+let INT = { has: () => false };            // rebuilt when data loads
+const teamOpened = i => INT.has(i.author);
+// unanswered = open with no reply from an INTERNAL login; with none configured
+// there is nobody to be internal, so it falls back to zero comments overall
+const isUnanswered = i => i.state === 'open' && (hasInternal() ? !i.internal_comments : !i.comments);
+
+// Overview describes the whole repo, so it ignores the assignee selection entirely —
+// that filter belongs to the People tab and only applies there.
+function filtered(withAssignee = false) {
+  const state = $('#fState').value, asg = withAssignee ? picked($('#fAssignees')) : [];
+  const f = focus && FOCUS[focus];
+  return D.issues.filter(i =>
+    (state === 'all' || i.state === state) &&
+    (!asg.length || i.assignees.some(a => asg.includes(a))) &&
+    (!f || f.test(i)));
+}
+
+function renderChips() {
+  const bits = [];
+  if (focus) bits.push(['focus', FOCUS[focus].label, () => { focus = null; }]);
+  if ($('#fState').value !== 'all') bits.push(['state', $('#fState').value, () => setState('all')]);
+  if (activeTab === 'people') for (const a of picked($('#fAssignees')))
+    bits.push(['assignee', a, () => { [...$('#fAssignees').options].find(o => o.value === a).selected = false; }]);
+  $('#chips').innerHTML = bits.length ? bits.map(([k, v], n) =>
+    `<span class="chip">${k}: ${esc(v)}<button data-chip="${n}" aria-label="Remove">×</button></span>`).join('') : '';
+  $$('#chips button').forEach(b => b.onclick = () => { bits[+b.dataset.chip][2](); renderAll(); });
+}
+
+const ISSUE_COLS = `<colgroup><col style="width:56px"><col style="width:82px"><col><col style="width:88px">
+  <col style="width:150px"><col style="width:160px"><col style="width:92px"><col style="width:104px"></colgroup>`;
+const ISSUE_HEAD = `<tr><th class="rownum">No.</th><th>Issue</th><th>Title</th><th>State</th>
+  <th>Author</th><th>Assignees</th><th>Comments</th><th>Updated</th></tr>`;
+
+const issueRows = (rows, cap = 1500) => rows.slice(0, cap).map((i, n) => `<tr>
+    <td class="rownum num">${n + 1}</td>
+    <td><a class="num" href="${i.url}" target="_blank" rel="noopener">#${i.number}</a></td>
+    <td>${esc(i.title)}${i.labels.slice(0,3).map(l => `<span class="lbl">${esc(l)}</span>`).join('')}</td>
+    <td><span class="pill ${i.state}">${i.state}</span></td>
+    <td>${esc(i.author ?? '')}</td><td>${esc(i.assignees.join(', '))}</td>
+    <td class="num">${i.comments}</td><td class="num">${(i.updated_at || '').slice(0, 10)}</td></tr>`).join('');
+
+function renderOverview() {
+  const rows = filtered(false), s = D.summary;
+  const openF = rows.filter(i => i.state === 'open');
+  const unansweredF = openF.filter(isUnanswered).length;
+  const unansLabel = hasInternal() ? 'Unanswered (no internal reply)' : 'Unanswered (0 comments)';
+
+  // Label-based counts are computed here from the loaded issues, using the very same predicate
+  // the drill-down uses — every open issue is loaded, so this is exact and cannot disagree
+  // with the list you get when you click the card.
+  const unansAll = D.issues.filter(isUnanswered);
+  const silent = unansAll.filter(i => !i.comments).length;
+  const community = unansAll.length - silent;
+  const bugs = D.issues.filter(FOCUS.bugs.test).length;
+  const enhancements = D.issues.filter(FOCUS.enhancements.test).length;
+  KPI_TOTAL = { open:s.open, closed:s.closed, unanswered:s.unanswered, bugs, enhancements, stale:s.stale };
+  $('#kpis').innerHTML = [
+    ['open', 'Open', s.open, 'var(--open)'],
+    ['closed', 'Closed', s.closed, 'var(--closed)'],
+    ['unanswered', hasInternal() ? 'Unanswered · no internal reply' : 'Unanswered · 0 comments', s.unanswered, 'var(--warn)'],
+    ['bugs', 'Open bugs', bugs, 'var(--bad)'],
+    ['enhancements', 'Open enhancements', enhancements, 'var(--good)'],
+    ['stale', 'Stale open', s.stale, 'var(--ink-3)'],
+  ].map(([key, k, v, c]) => `<div class="kpi click ${focus === key ? 'on' : ''}" data-focus="${key}" style="--accent:${c}" role="button" tabindex="0">
+      <b class="num">${nf.format(v ?? 0)}</b><span>${k}</span>
+      <small>${key === 'unanswered' && focus === 'unanswered'
+        ? `${nf.format(silent)} no replies · ${nf.format(community)} community only` : 'click to list'}</small></div>`).join('');
+  $$('#kpis .kpi').forEach(el => {
+    const go = () => { focus = focus === el.dataset.focus ? null : el.dataset.focus; renderAll();
+                       $('#tbl').closest('.card').scrollIntoView({ behavior:'smooth', block:'start' }); };
+    el.onclick = go;
+    el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } };
+  });
+
+  const p = palette();
+  draw('cTotals', $('#totalsType').value, ['Open', 'Closed', unansLabel],
+    [{ label:'issues in filter', data:[openF.length, rows.length - openF.length, unansweredF],
+       backgroundColor:[p[0], p[5], p[2]] }]);
+
+  $('#fCount').textContent = `${nf.format(rows.length)} of ${nf.format(D.issues.length)} loaded issues match`;
+  $('#tblTitle').textContent = focus ? FOCUS[focus].label : 'Issues';
+  $('#clearFocus').classList.toggle('hide', !focus);
+  $('#unansBar').classList.toggle('hide', focus !== 'unanswered');
+  if (focus === 'unanswered') {
+    const base = D.issues.filter(i => isUnanswered(i) && (!hideTeamOpened || !teamOpened(i)));
+    const counts = { all: base.length, silent: base.filter(i => !i.comments).length };
+    counts.community = counts.all - counts.silent;
+    const names = { all:'All', silent:'No replies', community:'Community only' };
+    for (const b of $$('#unansSeg button')) {
+      b.setAttribute('aria-pressed', String(b.dataset.v === unansMode));
+      b.textContent = `${names[b.dataset.v]} ${nf.format(counts[b.dataset.v])}`;
+    }
+    const team = D.issues.filter(i => isUnanswered(i) && teamOpened(i)).length;
+    $('#unansExplain').textContent =
+        'No replies = nobody commented at all. Community only = someone outside the team replied, nobody on the team did.'
+      + ` ${nf.format(team)} unanswered issues were opened by the team itself${hideTeamOpened ? ' (currently hidden)' : ''}.`;
+  }
+  const cap = 1500;
+  const expected = focus ? KPI_TOTAL[focus] : null;
+  // closed issues are capped in data.json, so a KPI can legitimately exceed what the table holds
+  const gap = expected != null && expected !== rows.length
+    ? ` · card counts ${nf.format(expected)} repo-wide; ${nf.format(Math.abs(expected - rows.length))} sit outside the loaded set (all open + newest ${nf.format(D.meta.counts?.closed_kept || 1500)} closed)`
+    : '';
+  $('#tableNote').textContent = (rows.length > cap
+    ? `showing first ${nf.format(cap)} of ${nf.format(rows.length)}` : `${nf.format(rows.length)} rows`) + gap;
+  $('#tbl tbody').innerHTML = issueRows(rows, cap);
+  renderChips();
+}
+
+function renderPeople() {
+  const asgFilter = picked($('#fAssignees'));
+  const p = palette();
+
+  const counts = new Map();  // login -> [open, closed]
+  for (const i of filtered(true)) for (const a of i.assignees) {
+    if (!counts.has(a)) counts.set(a, [0, 0]);
+    counts.get(a)[i.state === 'open' ? 0 : 1]++;
+  }
+  const rows2 = [...counts].filter(([l]) => !excluded(l) && (!asgFilter.length || asgFilter.includes(l)))
+    .sort((a, b) => (b[1][0] + b[1][1]) - (a[1][0] + a[1][1])).slice(0, asgFilter.length ? 200 : 25);
+  draw('cAssigned', 'bar', rows2.map(r => r[0]), [
+    { label:'open', data:rows2.map(r => r[1][0]), backgroundColor:p[0] },
+    { label:'closed', data:rows2.map(r => r[1][1]), backgroundColor:p[5] },
+  ], { onClick:(e, els, chart) => {
+         if (!els.length) return;
+         const who = chart.data.labels[els[0].index], l = who.toLowerCase();
+         const state = els[0].datasetIndex === 0 ? 'open' : 'closed';
+         showPeopleIssues(`${state === 'open' ? 'Open' : 'Closed'} issues assigned to ${who}`,
+           i => i.state === state && i.assignees.some(a => a.toLowerCase() === l));
+       },
+       onHover:(e, els) => { e.native.target.style.cursor = els.length ? 'pointer' : 'default'; } });
+  $('#asgNote').textContent = `${rows2.length} shown · respects the filters above`;
+
+  // when assignees are selected, every people chart narrows to just those people
+  const people = (D.people || [])
+    .filter(q => !excluded(q.login))
+    .filter(q => !asgFilter.length || asgFilter.includes(q.login));
+  // a selected person is always worth a bar, even at zero — otherwise drop them,
+  // or every drive-by reporter with a single comment gets one
+  const keepZero = asgFilter.length > 0;
+  const val = (q, key) => CLOSED_METRICS[key] ? CLOSED_METRICS[key].get(q) : q[key];
+  const top = (key, n = 25) => people.filter(q => keepZero || val(q, key) > 0)
+    .sort((a, b) => val(b, key) - val(a, key)).slice(0, keepZero ? 200 : n);
+  renderPerson(asgFilter);
+  renderPeopleIssues();
+
+  $('#comHint').textContent = asgFilter.length ? `${asgFilter.length} selected` : 'whole history';
+  const c = top('comments');
+  draw('cComments', 'bar', c.map(q => q.login), [{ label:'comments', data:c.map(q => q.comments), backgroundColor:p[1] }],
+    { onClick:(e, els, chart) => { if (els.length) showCommentedBy(chart.data.labels[els[0].index]); },
+      onHover:(e, els) => { e.native.target.style.cursor = els.length ? 'pointer' : 'default'; } });
+
+  const key = $('#closedMetric').value, k = top(key);
+  draw('cClosed', 'bar', k.map(q => q.login),
+    [{ label:$('#closedMetric').selectedOptions[0].textContent.split(' — ')[0],
+       data:k.map(q => val(q, key)), backgroundColor:p[4] }],
+    { onClick:(e, els, chart) => {
+        if (!els.length) return;
+        const who = chart.data.labels[els[0].index], l = who.toLowerCase();
+        const is = (v) => String(v || '').toLowerCase() === l;
+        const tests = {
+          self_closed:     i => is(i.author) && is(i.closed_by),
+          authored_closed: i => is(i.author) && i.state === 'closed',
+          closed_by_others:i => is(i.author) && i.state === 'closed' && !is(i.closed_by),
+          closed_by_them:  i => is(i.closed_by),
+        };
+        const names = { self_closed:'self-closed by', authored_closed:'opened and now closed, by',
+                        closed_by_others:'opened by (closed by someone else)', closed_by_them:'closed by' };
+        showPeopleIssues(`Issues ${names[key]} ${who}`, tests[key]);
+      },
+      onHover:(e, els) => { e.native.target.style.cursor = els.length ? 'pointer' : 'default'; } });
+  $('#closedNote').textContent = CLOSED_METRICS[key].note;
+
+  const d = D.meta.definitions || {};
+  const rows = [
+    ['Unanswered', 'KPI + totals chart', d.unanswered || 'Open issue with zero comments.'],
+    ['Assigned', 'Assigned issues', d.assigned_scope || 'Open and closed, counted once per assignee.'],
+    ['Comments', 'Comments per person', d.comment_scope || 'Non-PR issue comments only.'],
+    ['Close events', 'Tickets closed', d.close_events || 'Deduped to the most recent closer per issue.'],
+    ['Duplicates', 'Duplicates tab', d.duplicates || 'Label, state reason, or title similarity.'],
+  ];
+  $('#peopleDefs').innerHTML =
+      `<div class="pop-head">How these are measured<span class="k">${esc(D.meta.repo || '')}</span></div>`
+    + `<dl class="deflist">${rows.map(([k, where, text]) =>
+        `<div class="row"><dt>${k}<small>${where}</small></dt><dd>${esc(text)}</dd></div>`).join('')}</dl>`
+    + (D.meta.events_capped
+        ? `<div class="pop-foot"><span class="warn">&#9888;</span><span>GitHub caps close-event history, so closes are
+           only attributable since <b>${(D.meta.events_since || '').slice(0, 10)}</b> — anything closed before that
+           has no known actor.</span></div>` : '');
+}
+
+// Chart drill-downs render their issue list inside the People tab — clicking a bar should
+// never throw you back to Overview and lose the chart you were reading.
+let peopleFocus = null;   // { title, test }
+
+function showPeopleIssues(title, test, expected = null) {
+  peopleFocus = { title, test, expected };
+  renderPeopleIssues();
+  $('#peopleIssues').scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function renderPeopleIssues() {
+  const box = $('#peopleIssues');
+  if (!peopleFocus) { box.innerHTML = ''; return; }
+  const rows = D.issues.filter(peopleFocus.test);
+  const exp = peopleFocus.expected;
+  // The tiles count the whole repo; this table holds all open issues plus the most recent
+  // MAX_CLOSED_KEPT closed ones. Say so rather than letting the two numbers silently disagree.
+  const gap = exp != null && exp !== rows.length
+    ? ` · tile counts ${nf.format(exp)} across the full repo; ${nf.format(Math.abs(exp - rows.length))} fall outside the loaded set`
+    : '';
+  box.innerHTML = `<div class="card"><header><h2>${esc(peopleFocus.title)}</h2>
+      <span class="hint">${rows.length > 1500 ? `showing first 1,500 of ${nf.format(rows.length)}` : `${nf.format(rows.length)} rows`}${gap}</span>
+      <span class="spacer"></span><button class="ghost" id="closePeopleIssues">Close</button></header>
+    ${rows.length ? `<div class="tablewrap">
+      <table class="thead-only">${ISSUE_COLS}<thead>${ISSUE_HEAD}</thead></table>
+      <div class="tablebox"><table>${ISSUE_COLS}<tbody>${issueRows(rows)}</tbody></table></div>
+    </div>` : '<p class="hint">No issues in the loaded set match — older closed issues are outside the table cap.</p>'}`;
+  $('#closePeopleIssues').onclick = () => { peopleFocus = null; renderPeopleIssues(); };
+}
+
+function showCommentedBy(login) {
+  if (!D.issues.some(i => i.commenters)) {
+    alert('This data.json predates commenter tracking — re-run fetch_data.mjs to enable it.');
+    return;
+  }
+  const l = login.toLowerCase();
+  showPeopleIssues(`Issues ${login} commented on`,
+    i => (i.commenters || []).some(c => c.toLowerCase() === l));
+}
+
+// one selected assignee gets a stat card above the charts
+function renderPerson(selected) {
+  const box = $('#personCard');
+  if (selected.length !== 1) { box.innerHTML = ''; return; }
+  const p = (D.people || []).find(q => q.login === selected[0]);
+  if (!p) { box.innerHTML = ''; return; }
+  const l = p.login.toLowerCase();
+  const is = v => String(v || '').toLowerCase() === l;
+  const mine = i => i.assignees.some(a => is(a));
+  // every tile drills into the issues behind it, same as the Overview KPI cards
+  const stats = [
+    ['Assigned total', p.assigned_total, `Issues assigned to ${p.login}`, mine],
+    ['Assigned open',  p.assigned_open,  `Open issues assigned to ${p.login}`, i => mine(i) && i.state === 'open'],
+    ['Comments',       p.comments,       `Issues ${p.login} commented on`,
+      i => (i.commenters || []).some(c => is(c)), false],
+    ['Authored',       p.authored,       `Issues opened by ${p.login}`, i => is(i.author)],
+    ['Closed by author', p.authored_closed, `Closed issues opened by ${p.login}`,
+      i => is(i.author) && i.state === 'closed'],
+    ['Self-closed',    p.self_closed,    `Issues ${p.login} opened and closed themselves`,
+      i => is(i.author) && is(i.closed_by)],
+    ['Closed by someone else', CLOSED_METRICS.closed_by_others.get(p),
+      `Issues ${p.login} opened, closed by someone else`,
+      i => is(i.author) && i.state === 'closed' && !is(i.closed_by)],
+    ['Closed by this person', p.closed_by_them, `Issues closed by ${p.login}`, i => is(i.closed_by)],
+  ];
+  box.innerHTML = `<div class="card"><header><h2>${esc(p.login)}</h2>
+      <span class="badge">${p.internal ? 'internal' : 'external'}</span>
+      <span class="hint">every chart below is scoped to this person · click a tile to list its issues</span>
+    </header>
+    <div class="person">${stats.map(([k, v], n) =>
+      `<div class="stat" data-stat="${n}" role="button" tabindex="0"><b class="num">${nf.format(v || 0)}</b>
+        <span>${k}</span></div>`).join('')}</div></div>`;
+  $$('#personCard .stat').forEach(el => {
+    const [, value, title, test, countsIssues = true] = stats[+el.dataset.stat];
+    const go = () => showPeopleIssues(title, test, countsIssues ? value : null);
+    el.onclick = go;
+    el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } };
+  });
+}
+
+function renderDupes() {
+  const want = $('#dupeFilter').value;
+  const list = (D.duplicates || []).filter(c => want === 'all' || c.reason === want);
+  $('#dupeNote').textContent = `${nf.format(list.length)} of ${nf.format((D.duplicates || []).length)}`;
+  $('#dupes').innerHTML = list.length ? list.slice(0, 300).map(c => `<div class="clu">
+      <span class="tag">${c.reason}${c.detail ? ' · ' + c.detail : ''}${c.threshold ? ' · jaccard ≥ ' + c.threshold : ''}</span>
+      <ul>${c.members.map(m => `<li><a class="num" href="https://github.com/${D.meta.repo}/issues/${m.number}" target="_blank" rel="noopener">#${m.number}</a>
+        ${esc(m.title)} <span class="pill ${m.state}">${m.state}</span></li>`).join('')}</ul></div>`).join('')
+    : '<p class="hint">No duplicate findings.</p>';
+}
+
+const renderAll = () => { renderOverview(); renderPeople(); renderDupes(); };
+
+// ------------------------------------------------------------------- boot
+let activeTab = 'overview';
+$('#tabs').onclick = e => {
+  const b = e.target.closest('button[data-tab]'); if (!b) return;
+  activeTab = b.dataset.tab;
+  for (const x of $('#tabs').children) x.setAttribute('aria-selected', String(x === b));
+  for (const t of ['overview', 'people', 'dupes']) $('#tab-' + t).classList.toggle('hide', t !== activeTab);
+  $('#asgField').classList.toggle('hide', activeTab !== 'people');
+  renderAll();   // Overview ignores the assignee selection, People honours it
+};
+$('#theme').onclick = () => {
+  // with no explicit choice yet the page follows the OS, so read that as the current state,
+  // otherwise the first click appears to do nothing
+  const cur = document.documentElement.getAttribute('data-theme')
+    || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  applyTheme(cur === 'dark' ? 'light' : 'dark');
+};
+for (const id of ['#fState', '#fAssignees', '#totalsType', '#closedMetric', '#dupeFilter'])
+  $(id).onchange = renderAll;
+
+function setState(v) {
+  $('#fState').value = v;
+  $$('#fStateSeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+}
+$('#fStateSeg').onclick = e => { const b = e.target.closest('button'); if (b) { setState(b.dataset.v); renderAll(); } };
+$('#clearFocus').onclick = () => { focus = null; renderAll(); };
+$('#unansSeg').onclick = e => { const b = e.target.closest('button'); if (b) { unansMode = b.dataset.v; renderAll(); } };
+$('#hideTeamOpened').onchange = () => { hideTeamOpened = $('#hideTeamOpened').checked; renderAll(); };
+$('#howInfo').onclick = e => { if (!e.target.closest('.pop')) $('#howInfo').classList.toggle('open'); };
+document.addEventListener('click', e => { if (!e.target.closest('#howInfo')) $('#howInfo').classList.remove('open'); });
+$('#asgSearch').oninput = e => {
+  const q = e.target.value.toLowerCase();
+  for (const o of $('#fAssignees').options) o.hidden = q && !o.value.toLowerCase().includes(q);
+};
+$('#fReset').onclick = () => {
+  setState('all'); focus = null; peopleFocus = null; $('#asgSearch').value = '';
+  unansMode = 'all'; hideTeamOpened = false; $('#hideTeamOpened').checked = false;
+  for (const o of $('#fAssignees').options) { o.selected = false; o.hidden = false; }
+  renderAll();
+};
+
+(async () => {
+  try { const saved = localStorage.getItem('theme'); if (saved) document.documentElement.setAttribute('data-theme', saved); } catch {}
+  styleCharts();
+  try {
+    const res = await fetch('./data.json');
+    if (!res.ok) throw new Error(res.status);
+    D = await res.json();
+  } catch (e) {
+    console.warn('data.json unavailable, using built-in fallback sample:', e.message);
+  }
+  const src = D.meta.source || 'fallback';
+  $('#stamp').innerHTML = `<span class="badge ${src === 'live' ? 'live' : 'sample'}">${src}</span>`
+    + `<span class="dot"></span><span>${esc(D.meta.repo)}</span>`
+    + `<span class="dot"></span><span>refreshed ${D.meta.generated_at ? new Date(D.meta.generated_at).toLocaleString() : 'n/a'}</span>`
+    + `<span class="dot"></span><span>${nf.format((D.meta.internal || []).length)} internal logins</span>`
+    + (D.meta.counts?.expected_issues
+        ? `<span class="dot"></span><span>${nf.format(D.summary.open + D.summary.closed)} of ${nf.format(D.meta.counts.expected_issues)} issues indexed</span>` : '');
+  INT = internalSet();
+  const assignees = [...new Set(D.issues.flatMap(i => i.assignees))].filter(a => !excluded(a))
+    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  $('#stamp').title = $('#stamp').textContent.replace(/\s+/g, ' ').trim();
+  fill($('#fAssignees'), assignees);
+  $('#asgCount').textContent = `(${assignees.length})`;
+  renderAll();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+name: refresh issues dashboard
+
+on:
+  schedule:
+    - cron: '0 * * * *'   # hourly
+  workflow_dispatch:
+
+# ============================ DEPLOY TOGGLE ==================================
+# DEPLOY_TARGET = artifact  -> uploads the build as a workflow artifact (DEFAULT).
+#   Artifact visibility follows REPO visibility: anyone who can read the repo can
+#   download it. On a PUBLIC repo that means ANYONE — the artifact is not private.
+#   To keep per-person metrics internal, host this dashboard in a PRIVATE repo; the
+#   PAT only needs public read access to pull from a public source repo.
+# DEPLOY_TARGET = pages     -> publishes to GitHub Pages.
+#   WARNING: on a public repo, Pages is PUBLIC. This dashboard contains
+#   per-person productivity metrics (who closed what, who commented how much).
+#   Do not switch to `pages` on a public repo unless the team has agreed.
+#   To enable: set DEPLOY_TARGET to `pages` below, uncomment the `permissions`
+#   block and the two `pages-*` steps, and turn on Settings -> Pages -> "GitHub Actions".
+# =============================================================================
+env:
+  DEPLOY_TARGET: artifact
+  # OWNER/REPO default to the repo this workflow runs in (see the fetch step).
+  # Set them here to point the dashboard at a different repo.
+  # comma-separated internal logins (case-insensitive match)
+  INTERNAL: >-
+    sreelakshmi-bruno,anusree-bruno,naman-bruno,Rohan-Bruno,Pragadesh44-Bruno,ganesh-bruno,helloanoop,sid-bruno,abhishek-bruno,pooja-bruno,chirag-bruno,lohit-bruno,sanish-bruno,sachin-thakur-bruno,shubh-bruno,bijin-bruno,sanjaikumar-bruno,prateek-bruno,sharan-bruno,ved-bruno,ramki-bruno,james-ha-bruno,rreyn-bruno,gopu-bruno,sundram-bruno,tarun-bruno,Gopi-bruno,aditya-bruno,utkarsh-bruno,mohit-bruno,yashashri-bruno,ravindra-bruno,abhishekp-bruno,devendra-bruno,vijayh-bruno,rajashreehj-bruno,bony-bruno,sachin-bruno,anthonyd-bruno,abhisekm-bruno,adwait-bruno,arpit-bruno,shivang-bruno,morsh-bruno,lohxt1
+  DROP_BOTS: '1'
+  MAX_CLOSED_KEPT: '1500'
+  SIM_THRESHOLD: '0.75'
+  STALE_DAYS: '60'
+
+# --- uncomment for DEPLOY_TARGET=pages -------------------------------------
+# permissions:
+#   contents: read
+#   pages: write
+#   id-token: write
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch issue data
+        env:
+          # PAT (5,000 req/hr). The built-in GITHUB_TOKEN is capped at 1,000/hr
+          # for the REST API in Actions and is NOT enough for a full-history pull.
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          export OWNER="${OWNER:-${GITHUB_REPOSITORY%/*}}"
+          export REPO="${REPO:-${GITHUB_REPOSITORY#*/}}"
+          node fetch_data.mjs
+
+      - name: Stage site
+        run: |
+          mkdir -p site
+          cp index.html data.json site/
+
+      # ---- DEFAULT: private artifact -------------------------------------
+      - name: Upload private artifact
+        if: env.DEPLOY_TARGET == 'artifact'
+        uses: actions/upload-artifact@v4
+        with:
+          name: issues-dashboard
+          path: site
+          retention-days: 14
+
+      # ---- OPTION: GitHub Pages (public on a public repo) -----------------
+      # - name: Upload Pages artifact
+      #   if: env.DEPLOY_TARGET == 'pages'
+      #   uses: actions/upload-pages-artifact@v3
+      #   with:
+      #     path: site
+      # - name: Deploy to Pages
+      #   if: env.DEPLOY_TARGET == 'pages'
+      #   uses: actions/deploy-pages@v4
