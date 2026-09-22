@@ -20,8 +20,9 @@ on:
 # =============================================================================
 env:
   DEPLOY_TARGET: pages
-  # OWNER/REPO default to the repo this workflow runs in (see the fetch step).
-  # Set them here to point the dashboard at a different repo.
+  # This dashboard tracks usebruno/bruno's issues, not the repo the workflow runs in.
+  OWNER: usebruno
+  REPO: bruno
   # comma-separated internal logins (case-insensitive match)
   INTERNAL: >-
     sreelakshmi-bruno,anusree-bruno,naman-bruno,Rohan-Bruno,Pragadesh44-Bruno,ganesh-bruno,helloanoop,sid-bruno,abhishek-bruno,pooja-bruno,chirag-bruno,lohit-bruno,sanish-bruno,sachin-thakur-bruno,shubh-bruno,bijin-bruno,sanjaikumar-bruno,prateek-bruno,sharan-bruno,ved-bruno,ramki-bruno,james-ha-bruno,rreyn-bruno,gopu-bruno,sundram-bruno,tarun-bruno,Gopi-bruno,aditya-bruno,utkarsh-bruno,mohit-bruno,yashashri-bruno,ravindra-bruno,abhishekp-bruno,devendra-bruno,vijayh-bruno,rajashreehj-bruno,bony-bruno,sachin-bruno,anthonyd-bruno,abhisekm-bruno,adwait-bruno,arpit-bruno,shivang-bruno,morsh-bruno,lohxt1
