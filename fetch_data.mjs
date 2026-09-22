@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // GitHub issues dashboard fetcher. Node 20+, built-in fetch, zero dependencies.
-// Writes a single data.json consumed by index.html.
+// Writes public/data.json, which Vite serves as-is in dev and copies into dist/ on build.
 //
 // Run: OWNER=usebruno REPO=bruno INTERNAL=alice,bob GITHUB_TOKEN=ghp_... node fetch_data.mjs
 
@@ -17,7 +17,7 @@ const INTERNAL = (process.env.INTERNAL || '').split(',').map(s => s.trim()).filt
 const INTERNAL_SET = new Set(INTERNAL.map(l => l.toLowerCase()));
 const isInternal = l => !!l && INTERNAL_SET.has(l.toLowerCase());
 const TOKEN    = process.env.GITHUB_TOKEN || '';
-const OUT      = process.env.OUT || './data.json';
+const OUT      = process.env.OUT || './public/data.json';
 
 const DROP_BOTS       = process.env.DROP_BOTS !== '0';      // drop logins matching /\[bot\]$/i
 const MAX_CLOSED_KEPT = +(process.env.MAX_CLOSED_KEPT || 1500); // table cap only; COUNTS stay exact
@@ -69,7 +69,7 @@ async function req(url, tries = 0, soft = []) {
       `MAX_RATE_WAIT_MS (${MAX_RATE_WAIT_MS}ms). Set GITHUB_TOKEN to a PAT (5,000 req/hr) and rerun.`);
     console.error(`rate limit hit, sleeping ${Math.round(waitMs / 1000)}s until reset`);
     await new Promise(r => setTimeout(r, waitMs));
-    return req(url, tries + 1);
+    return req(url, tries + 1, soft);
   }
   throw new Error(`${res.status} ${res.statusText} ${url}\n${(await res.text()).slice(0, 300)}`);
 }
@@ -111,7 +111,8 @@ async function paginate(path, params = {}) {
 // Ground truth for completeness. The Search API counts what the list endpoint should return.
 async function searchCount(q) {
   const url = `https://api.github.com/search/issues?per_page=1&q=${encodeURIComponent(`repo:${OWNER}/${REPO} ${q}`)}`;
-  try { return (await (await req(url)).json()).total_count ?? null; } catch { return null; }
+  try { return (await (await req(url)).json()).total_count ?? null; }
+  catch (e) { console.error(`  completeness check skipped: ${e.message}`); return null; }
 }
 
 // ------------------------------------------------- near-duplicate titles
@@ -188,11 +189,9 @@ const keepLogin = l => !!l && !(DROP_BOTS && BOT_RE.test(l));
 // state=all is capped at page 100 and under-delivers; walking each state separately and
 // unioning gets materially more (measured on usebruno/bruno: 1271 open vs 1042 via state=all).
 // Pages come back short and sometimes empty on big repos, so neither walk can be trusted alone.
-const walks = [];
-for (const state of ['open', 'closed', 'all']) {
-  const { rows } = await paginate(`/repos/${OWNER}/${REPO}/issues`, { state });
-  walks.push(...rows);
-}
+// independent reads, none depends on another's result — run them concurrently
+const walks = (await Promise.all(['open', 'closed', 'all'].map(state =>
+  paginate(`/repos/${OWNER}/${REPO}/issues`, { state })))).flatMap(r => r.rows);
 let raw = [...new Map(walks.map(i => [i.id, i])).values()];
 console.log(`  union of state walks: ${raw.length} unique items (${walks.length} fetched)`);
 // The list endpoints drop items on large repos (short pages, empty pages, a hard 422 past
@@ -262,8 +261,11 @@ if (expectedIssues != null) {
 const issueNums = new Set(issues.map(i => i.number));
 const byNumber  = new Map(issues.map(i => [i.number, i]));
 
-const { rows: rawComments } = await paginate(`/repos/${OWNER}/${REPO}/issues/comments`);
-const { rows: rawEvents, capped: eventsCapped } = await paginate(`/repos/${OWNER}/${REPO}/issues/events`);
+// neither depends on the other's result — fetch both at once
+const [{ rows: rawComments }, { rows: rawEvents, capped: eventsCapped }] = await Promise.all([
+  paginate(`/repos/${OWNER}/${REPO}/issues/comments`),
+  paginate(`/repos/${OWNER}/${REPO}/issues/events`),
+]);
 
 // comments: keep only those whose issue_url resolves to a known non-PR issue
 const commentsBy = new Map();
@@ -301,10 +303,13 @@ const now = Date.now();
 const staleCut = now - STALE_DAYS * 864e5;
 
 const people = new Map();
+// keyed lowercase so a casing mismatch between the configured INTERNAL list and the API's
+// actual login casing collapses onto one person instead of splitting into two rows
 const person = l => {
-  if (!people.has(l)) people.set(l, { login: l, internal: isInternal(l), assigned_total: 0,
+  const key = l.toLowerCase();
+  if (!people.has(key)) people.set(key, { login: l, internal: isInternal(l), assigned_total: 0,
     assigned_open: 0, comments: 0, closed_by_them: 0, self_closed: 0, authored: 0, authored_closed: 0 });
-  return people.get(l);
+  return people.get(key);
 };
 INTERNAL.forEach(person);                                  // internal logins always present, even at zero
 for (const [l, n] of commentsBy) person(l).comments = n;
@@ -340,6 +345,7 @@ for (const i of issues) {
 
 for (const [num, { login: closer }] of closerOf) {
   if (!keepLogin(closer)) continue;
+  if (byNumber.get(num)?.state === 'open') continue;   // reopened since; this close is stale
   person(closer).closed_by_them++;
   if (closer === login(byNumber.get(num)?.user)) person(closer).self_closed++;
 }
@@ -381,7 +387,7 @@ for (const g of nearDuplicateClusters(exported))
 // ------------------------------------------------------------------ write
 const data = {
   meta: { repo: `${OWNER}/${REPO}`, generated_at: new Date().toISOString(), source: 'live',
-          internal: INTERNAL, definitions: DEF,
+          internal: INTERNAL, definitions: DEF, stale_days: STALE_DAYS,
           // GitHub caps /issues/events at 30,000 (newest first), so close attribution only
           // reaches back to events_since. Closes older than that have no known actor.
           events_capped: !!eventsCapped, events_since: eventsSince,
@@ -393,6 +399,11 @@ const data = {
   duplicates,
 };
 
-await (await import('node:fs/promises')).writeFile(OUT, JSON.stringify(data, null, 2));
+{
+  const fs = await import('node:fs/promises');
+  const { dirname } = await import('node:path');
+  await fs.mkdir(dirname(OUT), { recursive: true });
+  await fs.writeFile(OUT, JSON.stringify(data, null, 2));
+}
 console.log(`wrote ${OUT}: ${data.summary.open} open / ${data.summary.closed} closed, ` +
             `${data.people.length} people, ${duplicates.length} duplicate findings`);

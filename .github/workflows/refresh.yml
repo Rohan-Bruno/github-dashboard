@@ -48,6 +48,9 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install dependencies
+        run: npm ci
+
       - name: Fetch issue data
         env:
           # PAT (5,000 req/hr). The built-in GITHUB_TOKEN is capped at 1,000/hr
@@ -58,10 +61,13 @@ jobs:
           export REPO="${REPO:-${GITHUB_REPOSITORY#*/}}"
           node fetch_data.mjs
 
+      - name: Build
+        run: npm run build   # writes dist/, which already includes public/data.json
+
       - name: Stage site
         run: |
           mkdir -p site
-          cp index.html data.json site/
+          cp -r dist/. site/
 
       # ---- DEFAULT: private artifact -------------------------------------
       - name: Upload private artifact

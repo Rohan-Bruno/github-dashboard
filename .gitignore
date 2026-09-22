@@ -1,2 +1,10 @@
 # Never commit the PAT.
 .env
+
+# Generated per-run; contains per-person metrics. The workflow builds this
+# fresh into site/ on every refresh and never commits it back to the repo.
+data.json
+public/data.json
+
+node_modules
+dist
