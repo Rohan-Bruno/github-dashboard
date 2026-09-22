@@ -36,7 +36,7 @@ All config is env/constants at the top of `fetch_data.mjs`, mirrored in `refresh
 
 | var | default | meaning |
 |---|---|---|
-| `OWNER` / `REPO` | `usebruno`/`bruno` | the single repo to pull |
+| `OWNER` / `REPO` | `<Owner-name>`/`<Repo-Name>` | the single repo to pull |
 | `INTERNAL` | *(empty)* | comma-separated internal logins, matched **case-insensitively** (GitHub logins are); drives the internal-only toggles and the unanswered rule |
 | `GITHUB_TOKEN` | *(empty)* | PAT, put it in `.env`, never here. Unauthenticated is 60 req/hr — it will not finish |
 | `DROP_BOTS` | `1` | drop logins matching `/\[bot\]$/i`; set `0` to keep them |
@@ -57,8 +57,8 @@ Put the PAT and the repo config in **`.env`** once (it is git-ignored — see `.
 
 ```
 GITHUB_TOKEN=ghp_xxx
-OWNER=usebruno
-REPO=bruno
+OWNER=<owner-name>
+REPO=<repo-name>
 INTERNAL=login1,login2
 ```
 
