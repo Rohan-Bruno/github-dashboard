@@ -19,7 +19,7 @@ on:
 #   block and the two `pages-*` steps, and turn on Settings -> Pages -> "GitHub Actions".
 # =============================================================================
 env:
-  DEPLOY_TARGET: artifact
+  DEPLOY_TARGET: pages
   # OWNER/REPO default to the repo this workflow runs in (see the fetch step).
   # Set them here to point the dashboard at a different repo.
   # comma-separated internal logins (case-insensitive match)
@@ -30,17 +30,17 @@ env:
   SIM_THRESHOLD: '0.75'
   STALE_DAYS: '60'
 
-# --- uncomment for DEPLOY_TARGET=pages -------------------------------------
-# permissions:
-#   contents: read
-#   pages: write
-#   id-token: write
 permissions:
   contents: read
+  pages: write
+  id-token: write
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -79,11 +79,12 @@ jobs:
           retention-days: 14
 
       # ---- OPTION: GitHub Pages (public on a public repo) -----------------
-      # - name: Upload Pages artifact
-      #   if: env.DEPLOY_TARGET == 'pages'
-      #   uses: actions/upload-pages-artifact@v3
-      #   with:
-      #     path: site
-      # - name: Deploy to Pages
-      #   if: env.DEPLOY_TARGET == 'pages'
-      #   uses: actions/deploy-pages@v4
+      - name: Upload Pages artifact
+        if: env.DEPLOY_TARGET == 'pages'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Deploy to Pages
+        id: deployment
+        if: env.DEPLOY_TARGET == 'pages'
+        uses: actions/deploy-pages@v4
